@@ -75,8 +75,6 @@
 //--------------------------------------------------------------------------------------------------
 #define DOT_DELIMITER_CHAR '.'
 
-#define MAX_ASSET_DATA_HANDLERS 4
-
 //--------------------------------------------------------------------------------------------------
 /**
  *  SLASH as the path delimiter char
@@ -84,6 +82,12 @@
 //--------------------------------------------------------------------------------------------------
 #define SLASH_DELIMITER_CHAR '/'
 
+//--------------------------------------------------------------------------------------------------
+/**
+ *  Space allocated for resource handler callback functions
+ */
+//--------------------------------------------------------------------------------------------------
+#define MAX_ASSET_DATA_HANDLERS 4
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -2462,6 +2466,9 @@ le_avdata_ResourceEventHandlerRef_t le_avdata_AddResourceEventHandler
         {
             LE_INFO("Registering handler on %s", key);
             assetDataPtr = le_hashmap_GetValue(iter);
+            if(assetDataPtr->nHandlers >= MAX_ASSET_DATA_HANDLERS) {
+                return LE_NO_MEMORY;
+            }
             assetDataPtr->handlerPtr[assetDataPtr->nHandlers++] = handlerPtr;
             assetDataPtr->contextPtr = contextPtr;
 
