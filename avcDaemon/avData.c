@@ -75,6 +75,8 @@
 //--------------------------------------------------------------------------------------------------
 #define DOT_DELIMITER_CHAR '.'
 
+#define MAX_ASSET_DATA_HANDLERS 4
+
 //--------------------------------------------------------------------------------------------------
 /**
  *  SLASH as the path delimiter char
@@ -252,7 +254,8 @@ typedef struct
     le_avdata_AccessType_t clientAccess;        ///< Permitted client access to this asset data.
     le_avdata_DataType_t dataType;              ///< Data type of the Asset Value.
     AssetValue_t value;                         ///< Asset Value.
-    le_avdata_ResourceHandlerFunc_t handlerPtr; ///< Registered handler when asset data is accessed.
+    le_avdata_ResourceHandlerFunc_t handlerPtr[MAX_ASSET_DATA_HANDLERS]; ///< Registered handler when asset data is accessed.
+    int nHandlers;
     void* contextPtr;                           ///< Client context for the handler.
     le_dls_List_t arguments;                    ///< Argument list for the handler.
     le_msg_SessionRef_t msgRef;                 ///< Session reference.
@@ -905,6 +908,26 @@ static le_result_t IsPathFound
 }
 
 
+static void RunEachHandler
+(
+    const char* path,
+    le_avdata_AccessType_t accessType,
+    AssetData_t* it,
+    bool shouldDelete
+)
+{
+    le_avdata_ArgumentListRef_t argListRef =
+                                        le_ref_CreateRef(ArgListRefMap, &it->arguments);
+    for(int i = 0; i < it->nHandlers; i++) {
+        LE_INFO("Calling handler %d of %d for %s", i, it->nHandlers, path);
+        it->handlerPtr[i](path, accessType, argListRef, it->contextPtr);
+    }
+    if(shouldDelete) {
+        le_ref_DeleteRef(ArgListRefMap, argListRef);
+    }
+}
+
+
 //--------------------------------------------------------------------------------------------------
 /**
  * Gets the asset value associated with the provided asset data path.
@@ -957,15 +980,9 @@ static le_result_t GetVal
     }
 
     // Call registered handler.
-    if ((!isClient) && (assetDataPtr->handlerPtr != NULL))
+    if ((!isClient) && (assetDataPtr->handlerPtr[0] != NULL))
     {
-        le_avdata_ArgumentListRef_t argListRef
-             = le_ref_CreateRef(ArgListRefMap, &assetDataPtr->arguments);
-
-        assetDataPtr->handlerPtr(namespacedPath, LE_AVDATA_ACCESS_READ,
-                                 argListRef, assetDataPtr->contextPtr);
-
-        le_ref_DeleteRef(ArgListRefMap, argListRef);
+        RunEachHandler(namespacedPath, LE_AVDATA_ACCESS_READ, assetDataPtr, true);
     }
 
     // Get the value.
@@ -1089,13 +1106,7 @@ static le_result_t SetVal
         // Call registered handler.
         if ((!isClient) && (assetDataPtr->handlerPtr != NULL))
         {
-            le_avdata_ArgumentListRef_t argListRef
-                 = le_ref_CreateRef(ArgListRefMap, &assetDataPtr->arguments);
-
-            assetDataPtr->handlerPtr(namespacedPath, LE_AVDATA_ACCESS_WRITE,
-                                     argListRef, assetDataPtr->contextPtr);
-
-            le_ref_DeleteRef(ArgListRefMap, argListRef);
+            RunEachHandler(namespacedPath, LE_AVDATA_ACCESS_WRITE, assetDataPtr, true);
         }
 
         // Store asset data if it is a setting and asset data has been restored already
@@ -1152,10 +1163,10 @@ static le_result_t InitResource
     assetDataPtr->serverAccess = serverAccess;
     assetDataPtr->clientAccess = clientAccess;
     assetDataPtr->dataType = LE_AVDATA_DATA_TYPE_NONE;
-    assetDataPtr->handlerPtr = NULL;
     assetDataPtr->contextPtr = NULL;
     assetDataPtr->arguments = LE_DLS_LIST_INIT;
     assetDataPtr->msgRef = sessionRef;
+    assetDataPtr->nHandlers = 0;
 
     le_hashmap_Put(AssetDataMap, assetPathPtr, assetDataPtr);
 
@@ -2315,7 +2326,7 @@ static void ProcessAvServerExecRequest
         }
         else
         {
-            if (assetDataPtr->handlerPtr == NULL)
+            if (assetDataPtr->handlerPtr[0] == NULL)
             {
                 LE_ERROR("Server attempts to execute a command, but no command defined.");
                 RespondToAvServer(COAP_NOT_FOUND, NULL, 0);
@@ -2326,15 +2337,7 @@ static void ProcessAvServerExecRequest
 
                 if (result == LE_OK)
                 {
-
-                    // Create a safe ref with the argument list, and pass that to the handler.
-                    le_avdata_ArgumentListRef_t argListRef =
-                                         le_ref_CreateRef(ArgListRefMap, &assetDataPtr->arguments);
-
-                    // Execute the command with the argument list collected earlier.
-                    assetDataPtr->handlerPtr(path, LE_AVDATA_ACCESS_EXEC, argListRef,
-                                             assetDataPtr->contextPtr);
-
+                    RunEachHandler(path, LE_AVDATA_ACCESS_EXEC, assetDataPtr, false);
                     // Note that we are not repsonding to AV server yet. The response happens when
                     // the client app finishes command execution and calls
                     // le_avdata_ReplyExecResult.
@@ -2459,7 +2462,7 @@ le_avdata_ResourceEventHandlerRef_t le_avdata_AddResourceEventHandler
         {
             LE_INFO("Registering handler on %s", key);
             assetDataPtr = le_hashmap_GetValue(iter);
-            assetDataPtr->handlerPtr = handlerPtr;
+            assetDataPtr->handlerPtr[assetDataPtr->nHandlers++] = handlerPtr;
             assetDataPtr->contextPtr = contextPtr;
 
             if (NULL == handlerRef)
@@ -2521,7 +2524,7 @@ void le_avdata_RemoveResourceEventHandler
             LE_INFO("Removing handler from %s", key);
             assetDataPtr = le_hashmap_GetValue(iter);
 
-            assetDataPtr->handlerPtr = NULL;
+            assetDataPtr->nHandlers = 0;
             assetDataPtr->contextPtr = NULL;
         }
     }
