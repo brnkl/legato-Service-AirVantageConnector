@@ -923,7 +923,7 @@ static void RunEachHandler
     le_avdata_ArgumentListRef_t argListRef =
                                         le_ref_CreateRef(ArgListRefMap, &it->arguments);
     for(int i = 0; i < it->nHandlers; i++) {
-        LE_INFO("Calling handler %d of %d for %s", i, it->nHandlers, path);
+        LE_INFO("Calling handler %d of %d for %s", i + 1, it->nHandlers, path);
         it->handlerPtr[i](path, accessType, argListRef, it->contextPtr);
     }
     if(shouldDelete) {
