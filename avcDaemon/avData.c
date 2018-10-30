@@ -2475,7 +2475,7 @@ le_avdata_ResourceEventHandlerRef_t le_avdata_AddResourceEventHandler
             LE_INFO("Registering handler on %s", key);
             assetDataPtr = le_hashmap_GetValue(iter);
             if(assetDataPtr->nHandlers >= MAX_ASSET_DATA_HANDLERS) {
-                return LE_NO_MEMORY;
+                return NULL;
             }
             assetDataPtr->handlerPtr[assetDataPtr->nHandlers++] = handlerPtr;
             assetDataPtr->contextPtr = contextPtr;
