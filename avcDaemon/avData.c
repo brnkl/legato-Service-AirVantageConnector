@@ -931,6 +931,14 @@ static void RunEachHandler
     }
 }
 
+static bool HasHandler
+(
+    AssetData_t* it
+)
+{
+    return it->nHandlers > 0;
+}
+
 
 //--------------------------------------------------------------------------------------------------
 /**
@@ -984,7 +992,7 @@ static le_result_t GetVal
     }
 
     // Call registered handler.
-    if ((!isClient) && (assetDataPtr->handlerPtr[0] != NULL))
+    if (!isClient && HasHandler(assetDataPtr))
     {
         RunEachHandler(namespacedPath, LE_AVDATA_ACCESS_READ, assetDataPtr, true);
     }
@@ -2330,7 +2338,7 @@ static void ProcessAvServerExecRequest
         }
         else
         {
-            if (assetDataPtr->handlerPtr[0] == NULL)
+            if (HasHandler(assetDataPtr))
             {
                 LE_ERROR("Server attempts to execute a command, but no command defined.");
                 RespondToAvServer(COAP_NOT_FOUND, NULL, 0);
